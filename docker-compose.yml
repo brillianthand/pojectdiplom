@@ -1,0 +1,85 @@
+name: kanban
+
+# Запуск:   docker compose up -d --build
+# Стоп:     docker compose down
+# Сброс БД: docker compose down -v
+#
+# Доступы после старта:
+#   фронт:    http://localhost:5173
+#   бэк:      http://localhost:8080/api/health
+#   postgres: localhost:5432  (настройки в .env)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kanban-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [kanban]
+
+  backend:
+    container_name: kanban-backend
+    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile_inline: |
+        FROM golang:1.25-alpine
+        WORKDIR /src
+        COPY go.mod go.sum ./
+        RUN go mod download
+        COPY . .
+        EXPOSE 8080
+        CMD ["go", "run", "./cmd/server"]
+    environment:
+      DATABASE_URL: "host=postgres port=5432 user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} sslmode=disable"
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      PORT: ${PORT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks: [kanban]
+
+  frontend:
+    container_name: kanban-frontend
+    restart: unless-stopped
+    build:
+      context: .
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+      dockerfile_inline: |
+        FROM node:20-alpine
+        WORKDIR /app
+        COPY package.json package-lock.json ./
+        RUN npm ci
+        COPY . .
+        EXPOSE 5173
+        CMD ["npx", "vite", "--host", "0.0.0.0"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:5173"
+    networks: [kanban]
+
+volumes:
+  pgdata:
+
+networks:
+  kanban:
+    driver: bridge
