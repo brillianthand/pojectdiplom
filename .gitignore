@@ -30,3 +30,6 @@ dist-ssr
 # Agent config
 .claude/
 CLAUDE.md
+
+# Thesis / Diploma documents
+диплом/
