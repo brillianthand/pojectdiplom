@@ -33,3 +33,6 @@ CLAUDE.md
 
 # Thesis / Diploma documents
 диплом/
+
+# Environment templates
+.env.example
